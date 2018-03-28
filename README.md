@@ -6,12 +6,14 @@ This project parses data from Retrosheet and MLB's PITCHf/x, which can subsequen
 
 Below are the steps needed to convert all the information from Retrosheet and Pitch F/X into a database.
 
-1) Go to <a href="http://www.retrosheet.org/game.htm">Retrosheet</a> and download the regular season event files (whichever period of time you wish to analyze. Make sure you download the folder into the same directory as the Python file.
+1) Go to Retrosheet and download the <a href="http://www.retrosheet.org/game.htm">regular season event files</a> (whichever period of time you wish to analyze. Also download the <a href= "http://www.retrosheet.org/gamelogs/index.html"> game log files</a>. Make sure you download the folder into the same directory as the Python file.
 
 2) Create the MySQL database by following the steps provided <a href="https://www.a2hosting.com/kb/developer-corner/mysql/managing-mysql-databases-and-users-from-the-command-line">here.</a>
 
-3) Run pitch.py to extract all the "inning/inning_all.xml" information from Pitch F/X. Note that with 30 teams in the MLB and a total of 81 home games for each team, there are typically 2,430 games per regular season. Depending on how many seasons you are looking at and your internet speed, this process can take a while (i.e. it took me ~ 1.5 hours to download 8 seasons worth of data).
+3) Run pitch.py to extract all the "inning/inning_all.xml" information (velocity, location, movement etc) from Pitch F/X  and players.py to extract all the "/players.xml" information from Pitch F/X (starting lineup information). Note that with 30 teams in the MLB and a total of 81 home games for each team, there are typically 2,430 games per regular season. Depending on how many seasons you are looking at and your internet speed, this process can take a while (i.e. it took me ~ 1.5 hours to download 8 seasons worth of data per script).
 
-4) Run the create.sql file in MySQL to create the database, and run the populate.sql in order to load data into the databases. Make sure to change the file paths in the populate.sql file.
+4) Run ballpark.py and gamelog.py to extract information about ballparks and general information about the game (windspeed, attendance, temperature, etc). This will not take more than 10 seconds as you have already downloaded the relevant files in step 1.
 
-5) Now you have everything you need to do analysis. To see what attributes are available, take a look at the create.sql file to see the tables and attributes.
+5) Run the create.sql file in MySQL to create the database, and run the populate.sql in order to load data into the databases. Make sure to change the file paths in the populate.sql file.
+
+6) Now you have everything you need to do analysis! To see what attributes are available, take a look at the create.sql file to see the tables and attributes.
