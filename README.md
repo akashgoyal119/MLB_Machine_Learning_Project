@@ -2,7 +2,7 @@
 
 This project parses data from Retrosheet and MLB's PITCHf/x, which can subsequently be used for data analysis and predictive modeling. I will obtain the data utilizing Python and then store it in a MySQL database.
 
- As an example of the information that you can analyze, see this XML file (http://gd2.mlb.com/components/game/mlb/year_2017/month_07/day_09/gid_2017_07_09_detmlb_clemlb_1/inning/inning_all.xml) 
+ As an example of the information that you can analyze, see <a href="http://gd2.mlb.com/components/game/mlb/year_2017/month_07/day_09/gid_2017_07_09_detmlb_clemlb_1/inning/inning_all.xml">this XML file.</a>
 
 Below are the steps needed to convert all the information from Retrosheet and Pitch F/X into a database.
 
