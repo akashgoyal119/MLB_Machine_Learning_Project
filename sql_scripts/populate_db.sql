@@ -1,10 +1,6 @@
-LOAD DATA
-	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/txt_output_files/2010-2017-Players.txt"
-    REPLACE INTO TABLE Player
-    FIELDS TERMINATED BY ','
-    LINES TERMINATED BY '\n'
-    (playerID,playerName,batHand,throwHand,DOB);
+USE mlb;
 
+#run these 3 below
 LOAD DATA
 	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/txt_output_files/ballparkOutput.txt"
     REPLACE INTO TABLE Ballpark
@@ -22,10 +18,11 @@ LOAD DATA
 
 LOAD DATA
 	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/gd2Data-2010-2017-test.txt"
-    REPLACE INTO TABLE TempAB
+    REPLACE INTO TABLE Pitch
     FIELDS TERMINATED BY ','
     OPTIONALLY ENCLOSED BY '"'
     LINES TERMINATED BY '\n';
+
 
 #just for testing. delete later
 LOAD DATA
@@ -39,4 +36,10 @@ LOAD DATA
     REPLACE INTO TABLE mlbAB
     FIELDS TERMINATED BY ','
     LINES TERMINATED BY '\n';
-    
+
+LOAD DATA
+	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/txt_output_files/2010-2017-Players.txt"
+    REPLACE INTO TABLE Player
+    FIELDS TERMINATED BY ','
+    LINES TERMINATED BY '\n'
+    (playerID,playerName,batHand,throwHand,DOB);
