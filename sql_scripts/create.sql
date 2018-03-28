@@ -1,11 +1,11 @@
+USE mlb;
+
 DROP TABLE IF EXISTS Ballpark;
 CREATE TABLE Ballpark(
 	parkID VARCHAR(50) PRIMARY KEY,
     parkName VARCHAR(50),
-    #altitude REAL DEFAULT 0,
     openDate DATE NOT NULL,
     closeDate DATE#,
-    #dimensions REAL
 );
 
 DROP TABLE IF EXISTS Game;
@@ -27,6 +27,34 @@ CREATE TABLE Game (
     parkID VARCHAR(50),
     FOREIGN KEY (parkID) REFERENCES Ballpark(parkID)
 );
+
+DROP TABLE IF EXISTS Player;
+CREATE TABLE Player(
+	gameID VARCHAR(50),
+    playerID VARCHAR(50),
+    firstName VARCHAR(50),
+    lastName VARCHAR(50),
+    rl CHAR(1),
+    bats CHAR(1),
+    fieldingPosition VARCHAR(5),
+    currentPosition VARCHAR(5),
+    theStatus VARCHAR(10),
+    teamAbbreviation VARCHAR(5),
+    teamID VARCHAR(5),
+    parentTeamAbbreviation VARCHAR(5),
+    parentTeamID VARCHAR(5),
+    batPosition INT,
+    gamePosition VARCHAR(5),
+    battingAverage FLOAT,
+    hr INT,
+    rbi INT,
+    wins INT,
+    losses INT,
+    era FLOAT,
+    PRIMARY KEY (gameID, playerID)
+);
+CREATE INDEX firstnameIndex ON Player(firstName);
+CREATE INDEX lastnameIndex ON Player(lastName);
 
 DROP TABLE IF EXISTS Pitch;
 CREATE TABLE Pitch(
@@ -59,33 +87,9 @@ CREATE TABLE Pitch(
     outs INT,
     cumulativePitches INT,
     timesFaced INT,
+    home_team_runs INT,
+    away_team_runs INT,
     PRIMARY KEY (gameID,pitchID)
     );
-
-#just used for debugging below
-CREATE TABLE mlbAB (
-	gameID VARCHAR(20) PRIMARY KEY,
-    mlbABs int
-    );
-
-DROP TABLE IF EXISTS RetrosheetAB;
-CREATE TABLE RetrosheetAB (
-	gameID VARCHAR(20) PRIMARY KEY,
-    rsheetABs INT
-    );
-    
-
-#this isn't useful anymore
-DROP TABLE IF EXISTS Player;
-CREATE TABLE Player(
-    playerID VARCHAR(50) PRIMARY KEY,
-    playerName VARCHAR(50),
-    batHand CHAR(1),
-    throwHand CHAR(1),
-    #sz_top REAL,
-    #sz_bottom REAL,
-    dob DATE
-);
-CREATE INDEX playerNameIndex ON Player(playerName);
 
 #SHOW ENGINE INNODB STATUS;

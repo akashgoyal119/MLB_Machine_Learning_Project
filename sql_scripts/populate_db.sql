@@ -1,6 +1,5 @@
 USE mlb;
 
-#run these 3 below
 LOAD DATA
 	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/txt_output_files/ballparkOutput.txt"
     REPLACE INTO TABLE Ballpark
@@ -17,29 +16,17 @@ LOAD DATA
     windSpeed,attendance,awayTeamScore,homeTeamScore,lengthGameOuts,isDoubleHeader);
 
 LOAD DATA
-	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/gd2Data-2010-2017-test.txt"
+	LOCAL INFILE "Users/t2/Desktop/github/MLB_Machine_Learning_Project/txt_output_files/gd2Data-game-2010-2017.txt"
     REPLACE INTO TABLE Pitch
     FIELDS TERMINATED BY ','
     OPTIONALLY ENCLOSED BY '"'
     LINES TERMINATED BY '\n';
 
-
-#just for testing. delete later
 LOAD DATA
-	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/retroABs.txt"
-    REPLACE INTO TABLE RetrosheetAB
-    FIELDS TERMINATED BY ','
-    LINES TERMINATED BY '\n';
-
-LOAD DATA
-	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/mlbABs.txt"
-    REPLACE INTO TABLE mlbAB
-    FIELDS TERMINATED BY ','
-    LINES TERMINATED BY '\n';
-
-LOAD DATA
-	LOCAL INFILE "Users/t2/Desktop/github/GD2_Baseball_Project/practicum/txt_output_files/2010-2017-Players.txt"
+	LOCAL INFILE "Users/t2/Desktop/github/MLB_Machine_Learning_Project/txt_output_files/patched-players-2010-2017.txt"
     REPLACE INTO TABLE Player
     FIELDS TERMINATED BY ','
-    LINES TERMINATED BY '\n'
-    (playerID,playerName,batHand,throwHand,DOB);
+    OPTIONALLY ENCLOSED BY '"'
+    LINES TERMINATED BY '\r\n';
+
+
