@@ -6,7 +6,7 @@ This project parses data from Retrosheet and MLB's PITCHf/x, which can subsequen
 
 Below are the steps needed to convert all the information from Retrosheet and Pitch F/X into a database.
 
-1) Go to <a href="http://www.retrosheet.org/game.htm">Retrosheet</a>and download the regular season event files (whichever period of time you wish to analyze. Make sure you download the folder into the same directory as the Python file.
+1) Go to <a href="http://www.retrosheet.org/game.htm">Retrosheet</a> and download the regular season event files (whichever period of time you wish to analyze. Make sure you download the folder into the same directory as the Python file.
 
 2) Create the MySQL database by following the steps provided <a href="https://www.a2hosting.com/kb/developer-corner/mysql/managing-mysql-databases-and-users-from-the-command-line">here.</a>
 
