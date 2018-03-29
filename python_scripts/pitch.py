@@ -21,8 +21,6 @@ for file in os.listdir(pathName):
     fname = open(pathName+fileInput,'r')
     eachLine = fname.readlines() 
 
-    #now extract the info... in hindsight I probably should have just used csv_reader
-    #but whatever it works... 
     for line in range(len(eachLine)):
         lineArray = eachLine[line].split(',')
         if lineArray[0]=='id':
