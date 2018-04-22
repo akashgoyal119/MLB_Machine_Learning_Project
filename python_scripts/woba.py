@@ -1,161 +1,207 @@
-#Baseball wOBA class
-from functools import reduce
+import os
+import csv
+import mysql.connector as mc 
+import time
+import webbrowser
+import sys
+from sklearn.cluster import KMeans
+import numpy as np
+import pandas as pd
+import numexpr
 
-class Woba:
-	def __init__(self,df):
-		self.df = df
+class REMatrix:
+    def __init__(self,cnx,startTime,yr=None,mo=None):
+        query1=''
+        query2=''
+        if yr and mo:   #this takes 0.35 seconds 
+            query1 = """SELECT Pitch2.gameID AS gameID ,curr_inn FROM Pitch2 
+                        INNER JOIN Game ON Pitch2.gameID = Game.gameID
+                        WHERE YEAR(gameDate)='{}' AND MONTH(gameDate)='{}'
+                        GROUP BY gameID,curr_inn""".format(yr,mo)
+                        #this takes 0.30 seconds
+            query2 = """SELECT Game.gameID AS gameID,abNum,pitchID,the_event,
+                        firstBaseRunner,secondBaseRunner, thirdBaseRunner,outs,
+                        home_team_runs,away_team_runs,curr_inn, homeTeamScore,
+                        awayTeamScore,gameDate
+                        FROM Pitch2 INNER JOIN Game ON Pitch2.gameID = Game.gameID
+                        WHERE YEAR(gameDate)='{}' AND MONTH(gameDate)='{}'""".format(yr,mo)
+        elif yr:        #this takes 0.91 seconds
+            query1 = """SELECT Pitch2.gameID AS gameID ,curr_inn 
+                        FROM Pitch2 INNER JOIN Game ON Pitch2.gameID = Game.gameID 
+                        WHERE YEAR(gameDate)='{}'
+                        GROUP BY gameID,curr_inn""".format(yr)
+                        #this takes 1.36 seconds
+            query2 = """SELECT Game.gameID AS gameID,abNum,pitchID,
+                        the_event,firstBaseRunner,secondBaseRunner, 
+                        thirdBaseRunner,outs,home_team_runs, 
+                        away_team_runs,curr_inn, homeTeamScore,
+                        awayTeamScore,gameDate 
+                        FROM Pitch2 INNER JOIN Game 
+                        ON Pitch2.gameID = Game.gameID 
+                        WHERE YEAR(gameDate)='{}'""".format(yr)
+        else:           #this took 7.10 seconds
+            query1 = """SELECT Pitch2.gameID AS gameID ,curr_inn
+                        FROM Pitch2
+                        GROUP BY gameID,curr_inn"""
+                        #this took 10.45 seconds
+            query2 = """SELECT Pitch2.gameID AS gameID,abNum,pitchID,
+                        the_event,firstBaseRunner,secondBaseRunner, 
+                        thirdBaseRunner,outs,home_team_runs, away_team_runs,
+                        curr_inn, homeTeamScore,awayTeamScore,gameDate 
+                        FROM Pitch2 INNER JOIN Game on Pitch2.gameID = Game.gameID"""
+        
+        self.game_inn_df = pd.read_sql_query(query1,cnx)
+        self.df = pd.read_sql_query(query2,cnx)
+        self.all_combos = [(item[1],item[2]) for item in self.game_inn_df.itertuples()] 
+        self.inning_list = []
+        self.ab_list = []
+        self.expect_dict = {}
+        self.generate_ab_list()
+        self.calculate_run_expectancies()
+        self.add_run_expectancies()
+    
+    def add_run_expectancies(self):
+        #works because at-bats are in the correctly sorted order
+        for i,ab in enumerate(self.ab_list):
+            start_sit = ab.situation 
+            ab.start_run_expectancy = self.expect_dict[start_sit]
+            try:
+                ab.next_ab = self.ab_list[i+1]
+                if ab.next_ab.abNum == ab.abNum+1:
+                    ab.end_run_expectancy = ab.next_ab.start_run_expectancy
+                else:
+                    ab.end_run_expectancy = 0
+            except IndexError as e: #special case for the last item
+                ab.next_ab = None
+                ab.end_run_expectancy = 0
+    
+    #create a dataframe of each gameID from self.all_combos, and then within those small dataframes
+    #look up the individual innings to get those stats. 
+    def generate_ab_list(self):
+        previous_game_id = None
+        curr_df = None
+        for j,item in enumerate(self.all_combos):
 
-		#steps... 
-		#1) look through the database and calculate the run expectancies for all 24 states (outs/runners). 
-		# Do this by choosing a select where XYZ runner is not on first second or third... and calculate
-		# the number of outs until the end of the inning
+            curr_time = time.time()
+            if item[0] != previous_game_id:
+                previous_game_id = item[0]
+                curr_df = self.df[self.df['gameID']==item[0]]
+                print ('this combo took {} seconds'.format(time.time()-curr_time))
 
-		#2) calculate the average starting run expectancy for each type of event (i.e. do a lookup of the above situation)
-		# before the AB in question
+            #I separated inn_df and curr_df because of performance issues
+            #allows me to look up current inning on a dataframe of just one game (~300Pitches)
+            #as opposed to looking at all 5.5 million pitches 
+            inn_df = curr_df[curr_df['curr_inn']==item[1]]
+            inning_object = Inning(curr_df,item[1],item[0])
+            
+            self.inning_list.append(inning_object)
+            
+            for i in range(len(inn_df)):
+                try:
+                    #if ab number is not the same as the next one, it's last pitch of AB
+                    if inn_df.iloc[i,1]<inn_df.iloc[i+1,1]:    
+                        try:
+                            ab_object = AB(inn_df.iloc[i,:],inning_object)
+                            self.ab_list.append(ab_object)
+                        #i.e. this is the condition where there's sometimes more than 3 outs...
+                        except ValueError as e:
+                            print ('there were more than 3 outs or less than 0 outs')
+                            continue
 
-		#3) calculate the run expectancy from right before the batter gets on base to the end of the inning.
+                #index error happens on last pitch of inning so this is an "action pitch"
+                except IndexError as e:
+                    try:
+                        ab_object = AB(inn_df.iloc[i,:],inning_object)
+                        self.ab_list.append(ab_object)
+                    except ValueError as e:
+                        print (str(item[0])+' had an AB with less than 0 or more than 3 outs')
+                        continue
+            
 
-		# 4) Take the difference between 3 and 2 for the run value of an event. You can thus have negative values since
-		# you are comparing the expectancy now versus before (whcih could drop if you had a bad at-bat)
-
-		#5) adjust home runs by looking at the state in Step 1 at the beginning vs. end of the at-bat + runs scored from the HR
-		# then take the weighted average of each of the 24 situations to calculate the run value. do this for all events
-
-		#6) calculate the run expectancy of an out and then add those to all the situations where you reach base to 
-		# update the run expectancy
-
-
-
-		#7) He attempts to match the calculations to league-average OBP so he increases each factor by 15%
-		
-		#8) calculation is just a hitter's sum of these weights divided by (AB + BB - IBB + SF + HBP)
-
-		#9) average hitter should be around 0.340, great hitter is above 0.400 and bad hitter below 0.300
-
-		#10) to calculate the run value per PA above average, simply take wOBA_player-wOBA_league_avg/1.15
-
-		#could also do the same calculation for win expectancy 
-
-class AB:
-	#I could also just pass a dataframe and extract values that way
-	def __init__(self,gameID,abNum,outs, runner_scenario, inning,event,start_runs):
-		self.gameID = gameID
-		self.abNum = abNum
-		self.outs = outs
-		self.runner_scenario = runner_scenario
-		
-		self.event = None
-		self.inning = inning
-		self.start_run_expectancy = None
-		self.end_run_expectancy = None
-		self.runs_created  = None
-
-	def calculate_runs_created(self):
-		return self.inning.endScore - self.df.loc[last_pitch,home_away_score]
-
-	def calculate_end_run_expectancy(self,nextAB=None):
-		if not nextAB:
-			return 0
-		elif nextAB.abNum > self.abNum+1:
-			return 0
-		else:
-			return nextAB.start_run_expectancy
-
-	def calculate_runs_created(self,nextAB=None):
-		if not nextAB:
-			return 0
-		else:
-			return self.end_run_expectancy-self.start_run_expectancy+nextAB.start_runs - self.start_runs 
-
+    def calculate_run_expectancies(self):
+        situations = [item.situation for item in self.ab_list]
+        runs_created = [item.runs_created for item in self.ab_list]
+        run_expectancy_df = pd.DataFrame({'situation':situations,'runs_created':runs_created})
+        for i in range(24):
+            self.expect_dict[i] = round(run_expectancy_df[run_expectancy_df.situation==i].mean()['runs_created'],3)
 
 class Inning:
-	def __init__(self,df):
-		self.inning_number = df.loc[:,'inning'].mode()
-		self.gameID = df.loc[:,'gameID'].mode()
-		self.home_or_away = self.get_home_or_away()
-		self.endScore = self.get_end_score(df)
+    def __init__(self,df,inn,gameID):
+        self.inning_number = inn
+        self.gameID = gameID
+        self.home_or_away = self.get_home_or_away()
+        self.endScore = self.get_end_score(df)
 
-	def get_home_or_away(self):
-		if self.inning_number*2%2 == 1:
-			return 'Home'
-		else:
-			return 'Away'
+    def get_home_or_away(self):
+        if self.inning_number*2%2 == 1:
+            return 'Home'
+        else:
+            return 'Away'
 
-	def get_end_score(self,df):
-		#just look at the last row of the dataframe
-		if self.home_or_away == 'Home':
-			return df[-1:'home_team_runs']
-		else:
-			return df[-1:'away_team_runs']
-		#this should look at the dataframe and return the score of the last 
-		#AB in the inning of the (away team if inning ends in 0.0 or home team if it ends in 0.5)
-		#note I will deal with getting rid of 9.5+ in the AB class
-
-#uses the chmod scheme in order to map scenarios from 1 to 8
-def calculate_runner_situation(aRow):
-	total = 0
-	if aRow['runner_1b']:
-		total+=1
-	if aRow['runner_2b']:
-		total+=2
-	if aRow['runner_3b']:
-		total+=4
-	return total
-
-#add 8 and 16 if outs are 1,2 respectively
-def calculate_situation(runner_sit,outs):
-	newSit = runner_sit
-	if outs >= 3 or outs <0:
-		raise ValueError('You cannot start the AB with 3 or less outs. There was probably an error w the data')
-	if outs == 0:
-		return newSit
-	elif outs ==1:
-		return newSit+8
-	elif outs ==2:
-		return newSit+16
+    def get_end_score(self,df):
+        #just look at the last row of the dataframe
+        inning_df = df[df['curr_inn']==self.inning_number]
+        if self.home_or_away == 'Home':
+            return inning_df['home_team_runs'].tail(1).iloc[0]
+        else:
+            return inning_df['away_team_runs'].tail(1).iloc[0]
 
 
-massive_df = pd.read_sql('SELECT * FROM Pitch')
-df_helper = 'SELECT gameID, inning, COUNT(*) FROM Pitch GROUP BY gameID, inning'
-all_combos = ['some_list_comprehnsion to extract all these']
-inning_list = []
-ab_list = []
+class AB:
+    #passing in a series here. 
+    def __init__(self,df,inning):
+        
+        self.gameID = df['gameID']
+        self.abNum = df['abNum']
+        self.outs = df['outs']
+        self.runners = (df['firstBaseRunner'],df['secondBaseRunner'],df['thirdBaseRunner'])
+        self.event = df['the_event']
+        self.inning = inning
+        self.situation = self.calculate_state()
+        self.runs_created  = self.calculate_runs_created(df)
+        self.start_run_expectancy = 0
+        self.end_run_expectancy = 0
+        self.next_ab = None
+        self.starting_runs = None
+        self.adjusted_runs_created = None
+    
+    #only call this after you've created a run-expectancy instance
+    def calculate_adjusted_runs_created(self):
+        if not next_ab:
+            self.adjusted_runs_created = self.end_run_expectancy - self.start_run_expectancy
+        else:
+            self.adjusted_runs_created = (self.end_run_expectancy - self.start_run_expectancy + 
+                                          self.next_ab.starting_runs -self.starting_runs)
+            
+    def calculate_runs_created(self,df):
+        if self.inning.home_or_away == 'Home':
+            self.starting_runs = df['home_team_runs']
+            return self.inning.endScore - df['home_team_runs']
+        else:
+            self.starting_runs = df['away_team_runs']
+            return self.inning.endScore - df['away_team_runs']
 
-for item in all_combos:
-	inning_df = massive_df[massive_df.loc[:,'gameID']==item.gameID and massive_df.loc[:,'inning']==item.inning]
-	inning_df.sort(columns=['pitchID'],inplace=True,kind='mergesort')
-	inning_object = Inning(inning_df)
-	#sort the dataframe on pitchNumberAscending
-	
+    #determines which of the 24 runner on base/outs circumstance
+    def calculate_state(self):
+        total = 0
+        if self.runners[0]:
+            total+=1
+        if self.runners[1]:
+            total+=2
+        if self.runners[2]:
+            total+=4
 
-	#now traverse through each line and determine if the current row's abNum is different from the next one, or
-	#if we hit a row out of bounds: if so create an AB oject
-	for indx,row in enumerate(inning_df.iterrows()):
-		try:
-			#I can further hash this out so that I really don't need the inning_object and don't have to worry
-			#about the reference getting deleted as I further traverse
-			if inning_df[indx:'abNum'] == inning_df[indx+1,'abNum']:
-				ab_object = AB(row['gameID'],row['abNum'],row['outs'],inning_object)
-				abList.append(ab_object)
-		except IndexOutOfBoundsError as e:
-			ab_object = AB(row['gameID'],row['abNum'],row['outs'],inning_object)
-			ab_list.append(ab_object)
+        if self.outs == 1:
+            total+=8
+        elif self.outs ==2:
+            total+=16
+        elif self.outs>=3 or self.outs<0:
+            raise ValueError("cant start AB with less than 0 or > 3 outs")
+        return total
 
-#now I can discard the the massive_df pandas array from memory since I have all the objects I need in my ab_list/inning_list
 
-#now initialize the list of outcomes
-avg_run_scored_dict = {}
-for i in range(24):
-	avg_run_scored_dict[i] = []
-
-for at_bat in ab_list:
-	try:
-		current_scenario = calculate_situation(at_bat.runner_scenario, at_bat.outs)
-		avg_run_scored_dict[current_scenario].append(at_bat.runs_created)
-	except ValueError as e:
-		print (at_bat.gameID,at_bat.abNum)
-		continue 
-
-for i in range(24):
-	avg = reduce(lambda x,y: x+y, avg_run_scored_dict[i])/5.0
-	print ('there were {} observations for category {}, and the average runs scored was {}'.format(len(avg_run_scored_dict[i]),i,avg))
+cnx = mc.connect(user='akashgoyal',password="******",host='stromberg.cs.uchicago.edu',database='mlb_practicum')
+startTime= time.time()
+tester2 = REMatrix(cnx,startTime,yr=2017,mo=4)
+print (tester2.expect_dict)
+print (time.time()-startTime)
