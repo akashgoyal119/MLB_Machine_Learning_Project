@@ -1,6 +1,8 @@
+#!/usr/bin/python3
 import os
 import csv
-import mysql.connector as mc 
+#import mysql.connector as mc 
+import pymysql as mc
 import time
 import webbrowser
 import sys
@@ -199,9 +201,27 @@ class AB:
             raise ValueError("cant start AB with less than 0 or > 3 outs")
         return total
 
+year = None
+month = None
+try:
+    pw = sys.argv[1].split('=')[1]
+    un = sys.argv[2].split('=')[1]
 
-cnx = mc.connect(user='akashgoyal',password="******",host='stromberg.cs.uchicago.edu',database='mlb_practicum')
-startTime= time.time()
-tester2 = REMatrix(cnx,startTime,yr=2017,mo=4)
-print (tester2.expect_dict)
-print (time.time()-startTime)
+    if len(sys.argv)==4:
+        year = int(sys.argv[3].split('=')[1])
+    elif len(sys.argv)==5:
+        year = int(sys.argv[3].split('=')[1])
+        month = int(sys.argv[4].split('=')[1])
+
+
+    cnx = mc.connect(user=un,password=pw,host='stromberg.cs.uchicago.edu',db='mlb_practicum',port=3306)
+    startTime= time.time()
+    tester2 = REMatrix(cnx,startTime,yr=year,mo=month)
+    print (tester2.expect_dict)
+    print (time.time()-startTime)
+
+except IndexError as e:
+    print ('usage --pw=password_name --un=user_name --yr=yr_number --mo=month_number')
+    print ('yr and mo are optional, but year is recommended for performance')
+except mc.err.OperationalError as e:
+    print ('username/password failed')
