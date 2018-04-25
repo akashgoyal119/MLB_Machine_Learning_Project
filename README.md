@@ -17,3 +17,13 @@ Below are the steps needed to convert all the information from Retrosheet and Pi
 5) Run the create.sql file in MySQL to create the database, and run the populate.sql in order to load data into the databases. Make sure to change the file paths in the populate.sql file.
 
 6) Now you have everything you need to do analysis! To see what attributes are available, take a look at the create.sql file to see the tables and attributes.
+
+
+Now that we have our database setup, we can run the statistical analysis. We'll focus on predicting the type of pitch a given pitcher is going to throw in a certain scenario. For example, let's say we're the Red Sox and we're in the 5th inning of a game in July down 3 runs facing Masahiro Tanaka, and it's currently a 1-1 count with 1 out and no runners on base. What kind of pitch is he most likely to throw next, and with what probabilities? (i.e. maybe he'll throw a slider with 50% probability, a splitter with 30% probability and a four-seam fastball with 20% probability).
+
+It makes sense that the type of pitch a player is going to throw depends on a great deal of factors. The question of whether to pitch to him or whether to pitch around him could be contingent on the strength of the other players in the lineup, the leverage of the situation (i.e. a pitcher might toy around with his worst pitches in a blowout or might stick with his guns in a close game), and many other factors.
+
+In order to run this analysis, we'll make use of logistic regression with an L1-normalized loss function. Additionally we'll use K-Means in order to cluster pitchers into certain classifications. By doing this, we can find pitchers who are very similar to each other and "crowd-source" the data so that we can use comparable pitchers' tendencies to gain more accurate predictions.
+
+
+
