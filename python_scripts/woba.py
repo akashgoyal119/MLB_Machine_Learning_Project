@@ -9,7 +9,7 @@ import sys
 from sklearn.cluster import KMeans
 import numpy as np
 import pandas as pd
-import numexpr
+import getpass
 
 class REMatrix:
     def __init__(self,cnx,startTime,yr=None,mo=None):
@@ -204,15 +204,15 @@ class AB:
 year = None
 month = None
 try:
-    pw = sys.argv[1].split('=')[1]
-    un = sys.argv[2].split('=')[1]
+    un = sys.argv[1].split('=')[1]
 
     if len(sys.argv)==4:
-        year = int(sys.argv[3].split('=')[1])
+        year = int(sys.argv[2].split('=')[1])
     elif len(sys.argv)==5:
-        year = int(sys.argv[3].split('=')[1])
-        month = int(sys.argv[4].split('=')[1])
+        year = int(sys.argv[2].split('=')[1])
+        month = int(sys.argv[3].split('=')[1])
 
+    pw = getpass.getpass()
 
     cnx = mc.connect(user=un,password=pw,host='stromberg.cs.uchicago.edu',db='mlb_practicum',port=3306)
     startTime= time.time()
