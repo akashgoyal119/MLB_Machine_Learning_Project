@@ -206,9 +206,9 @@ month = None
 try:
     un = sys.argv[1].split('=')[1]
 
-    if len(sys.argv)==4:
+    if len(sys.argv)==3:
         year = int(sys.argv[2].split('=')[1])
-    elif len(sys.argv)==5:
+    elif len(sys.argv)==4:
         year = int(sys.argv[2].split('=')[1])
         month = int(sys.argv[3].split('=')[1])
 
