@@ -147,7 +147,7 @@ class REMatrix:
                 df = self.batter_dicts[player]
                 dates = df['Game Date'].value_counts().keys()
                 for d in dates:
-                    condensed_df = df[df['Game Date']<=d]
+                    condensed_df = df[df['Game Date']<=d].sort_values(by="Game Date",kind='mergesort')
                     avg = condensed_df['Adjusted Runs Created'].mean()
                     gameID = condensed_df.iloc[-1,-2]
                     l = [player,gameID,avg]
@@ -159,7 +159,7 @@ class REMatrix:
                 df = self.pitcher_dicts[player]
                 dates = df['Game Date'].value_counts().keys()
                 for d in dates:
-                    condensed_df = df[df['Game Date']<=d]
+                    condensed_df = df[df['Game Date']<=d].sort_values(by="Game Date",kind='mergesort')
                     avg = condensed_df['Adjusted Runs Created'].mean()
                     gameID = condensed_df.iloc[-1,-2]
                     l = [player,gameID,avg]
@@ -320,10 +320,11 @@ class AB:
         return total
 
 if __name__=="__main__":
- 	cnx = mc.connect(user='akashgoyal',password=os.environ['DB_PASSWORD'],host='stromberg.cs.uchicago.edu',db='mlb_practicum',port=3306)
- 	startTime= time.time()
- 	re_obj = REMatrix(cnx,startTime,yr=2017,mo=5)
- 	print (time.time()-startTime)
+    pw = getpass.getpass()
+    cnx = mc.connect(user='akashgoyal',password=pw,host='stromberg.cs.uchicago.edu',db='mlb_practicum',port=3306)
+    startTime= time.time()
+    re_obj = REMatrix(cnx,startTime,yr=2017)
+    print (time.time()-startTime)
  	#pickle_out = open('pickler201705','wb')
  	#pickle.dump(re_obj,pickle_out)
  	#pickle_out.close()
