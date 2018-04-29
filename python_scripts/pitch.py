@@ -10,7 +10,7 @@ import time
 #http://gd2.mlb.com/components/game/mlb/year_2017/month_03/day_31/gid_2017_03_31_colmlb_seamlb_1/inning/inning_all.xml
 startTime = time.time()
 gameDict = {} #global variable
-pathName = 'retrosheet files/2010eve/'
+pathName = '2010eve/'
 for file in os.listdir(pathName):
     fileInput = os.fsdecode(file)
     gameNum = '1'
@@ -52,20 +52,35 @@ def getPitchAttributes(subtree,args):
     for arg in args:
         try:
             l1.append(subtree.attrib[arg])
-        except:
+        except KeyError as e:
+            #print (e)
+            #sys.exit()
             #this is the MySQL method of making a null
             l1.append(chr(92)+'N')
     return l1
 
 gameNum = 1
-myOutput = open('gd2Data-2010-2017-test.txt','w')
-error_writer = csv.writer(error_file,delimiter=',')
+myOutput = open('gd2Data-2010-2017-full.txt','w')
+errorLog = open('error_log.txt','w')
+error_writer = csv.writer(errorLog,delimiter=',')
 csv_writer = csv.writer(myOutput,delimiter=',')
 
-for item in gameDict:
+for i,item in enumerate(gameDict):
     file = urlopen(gameDict[item])
     data = file.readline()
-    game = ET.fromstring(data)
+    try:
+        game = ET.fromstring(data)
+    except ET.ParseError as e:
+        print ('THIS GAME GOT MESSED UP PLEASE SEE THE ERROR LOG FOR GAME',item)
+        print ('--------------------------------------------------------------')
+        error_writer.writerow([item,gameDict[item]])
+        continue
+    except Exception as e2:
+        print (e2)
+        print ('--------------------------------------------------------------')
+        error_writer.writerow([item,gameDict[item],e2])
+        continue 
+
     pitcherDict = {} #use to track pitch count
     batterVpitcher= {}
     home_team_runs = 0
@@ -73,9 +88,13 @@ for item in gameDict:
     ctr = 0
 
     for inning in game:
+        current_inning = inning.attrib['num']
         for half in inning:
             atBats = half.findall('atbat')
-            prevOuts = 0 
+            prevOuts = 0
+            curr_inn = int(current_inning)
+            if half.tag == 'bottom':
+                curr_inn+=0.5
             for at_bat in atBats:
                 pitches= at_bat.findall("pitch")
                 abInfo = [item] #make the gameID the first item in the list
@@ -101,7 +120,9 @@ for item in gameDict:
                     pitch_info = abInfo[:]
                     pitchCharacteristics = getPitchAttributes(pitch,['id','pitch_type',
                         'des','type','zone','x','y','start_speed','end_speed','sz_top',
-                        'sz_bot','pfx_x','pfx_z','break_y','break_angle','on_1b','on_2b','on_3b'])
+                        'sz_bot','pfx_x','pfx_z','px','pz','x0','y0','z0','vx0','vy0',
+                        'vz0','ax','ay','az','break_y','break_angle','break_length','type_confidence',
+                        'nasty','spin_dir','spin_rate','on_1b','on_2b','on_3b'])
                     pitch_info.extend(pitchCharacteristics)
                     pitch_info.append(prevOuts) #current number of outs before ball is in play
                     pitch_info.append(pitcherDict[current_pitcher]) #cumulative pitches by pitcher
@@ -109,10 +130,11 @@ for item in gameDict:
 
                     pitch_info.append(home_team_runs)
                     pitch_info.append(away_team_runs)
+                    pitch_info.append(curr_inn)
                     csv_writer.writerow(pitch_info)
 
                 if prevOuts >2:
-                    print (abInfo)
+                    error_writer.writerow(abInfo)
                 prevOuts = int(at_bat.attrib['o']) #update the outs so that the next for loop can utilize this info
                 try: 
                     home_team_runs = int(at_bat.attrib['home_team_runs'])
