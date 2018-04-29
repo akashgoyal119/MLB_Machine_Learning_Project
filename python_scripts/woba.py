@@ -9,6 +9,7 @@ from sklearn.cluster import KMeans
 import numpy as np
 import pandas as pd
 import getpass
+import datetime
 import pickle
 '''
 Here is how this file is structured
@@ -41,7 +42,11 @@ the runs generated from the current AB to the end of the inning. (This is all in
 for every bat in self.ab_list. This will allow us to generate a "value add above replacement" 
 for each batter.
 
-9) We're done! We've now calculated the value above replacement for each at-bat in the sample.
+9) Figure out the Ex-Ante runs created for each at-bat with the create_player_dfs function.
+This will go through all of the at-bat instances and create a dictionary with playerID as key
+and a dataframe consisting of columns gameID, playerID, abNum, runs created, date
+
+10) We're done! We've now calculated the value above replacement for each at-bat in the sample.
 Now we can calculate the weights for each type of hit and perform analysis
 '''
 
@@ -49,6 +54,7 @@ class REMatrix:
     def __init__(self,cnx,startTime,yr=None,mo=None):
         query1=''
         query2=''
+
         if yr and mo:   #this takes 0.35 seconds 
             query1 = """SELECT Pitch2.gameID AS gameID ,curr_inn FROM Pitch2 
                         INNER JOIN Game ON Pitch2.gameID = Game.gameID
@@ -58,7 +64,7 @@ class REMatrix:
             query2 = """SELECT Game.gameID AS gameID,abNum,pitchID,the_event,
                         firstBaseRunner,secondBaseRunner, thirdBaseRunner,outs,
                         home_team_runs,away_team_runs,curr_inn, homeTeamScore,
-                        awayTeamScore,gameDate
+                        awayTeamScore,gameDate, batterID, pitcherID
                         FROM Pitch2 INNER JOIN Game ON Pitch2.gameID = Game.gameID
                         WHERE YEAR(gameDate)='{}' AND MONTH(gameDate)='{}'""".format(yr,mo)
         elif yr:        #this takes 0.91 seconds
@@ -71,7 +77,7 @@ class REMatrix:
                         the_event,firstBaseRunner,secondBaseRunner, 
                         thirdBaseRunner,outs,home_team_runs, 
                         away_team_runs,curr_inn, homeTeamScore,
-                        awayTeamScore,gameDate 
+                        awayTeamScore,gameDate, batterID,pitcherID
                         FROM Pitch2 INNER JOIN Game 
                         ON Pitch2.gameID = Game.gameID 
                         WHERE YEAR(gameDate)='{}'""".format(yr)
@@ -83,7 +89,7 @@ class REMatrix:
             query2 = """SELECT Pitch2.gameID AS gameID,abNum,pitchID,
                         the_event,firstBaseRunner,secondBaseRunner, 
                         thirdBaseRunner,outs,home_team_runs, away_team_runs,
-                        curr_inn, homeTeamScore,awayTeamScore,gameDate 
+                        curr_inn, homeTeamScore,awayTeamScore,gameDate,batterID,pitcherID 
                         FROM Pitch2 INNER JOIN Game on Pitch2.gameID = Game.gameID"""
         
         self.game_inn_df = pd.read_sql_query(query1,cnx)
@@ -94,8 +100,59 @@ class REMatrix:
         self.expect_dict = {}
         self.generate_ab_list()
         self.calculate_run_expectancies() #generate 24 expectancies for 24 situations
-        self.add_run_expectancies()  
+        self.add_run_expectancies()
+        self.batter_dicts,self.pitcher_dicts = self.create_player_dfs()
+        self.create_csv('ok.txt')
     
+    #this will look at every at-bat and create a dataframe for each distinct batter/hitter
+    def create_player_dfs(self):
+        print ('about to create all the dataframes')
+        batter_dict = {}
+        pitcher_dict = {}
+
+        def convert_game_to_day(gameID):
+            theYear = int(gameID[3:7])
+            theMonth = int(gameID[7:9])
+            theDay = int(gameID[9:11])
+            return datetime.date(theYear,theMonth,theDay)
+
+        for ab in self.ab_list:
+            hit = {'gameID': [ab.gameID], 'playerID': [ab.batter], 'abNum': [ab.abNum],
+                    'Adjusted Runs Created':[ab.adjusted_runs_created], 'Game Date':[convert_game_to_day(ab.gameID)]}
+            p = {'gameID': [ab.gameID], 'playerID': [ab.pitcher], 'abNum': [ab.abNum],
+                    'Adjusted Runs Created':[ab.adjusted_runs_created], 'Game Date':[convert_game_to_day(ab.gameID)]}
+
+            hit_df = pd.DataFrame(hit)
+            p_df = pd.DataFrame(p)
+            
+            if ab.batter in batter_dict:
+                conc = pd.concat([batter_dict[ab.batter],hit_df])
+                batter_dict[ab.batter] = conc
+            else:
+                batter_dict[ab.batter] = hit_df
+            
+            if ab.pitcher in pitcher_dict:
+                conc = pd.concat([pitcher_dict[ab.pitcher],p_df])
+                pitcher_dict[ab.pitcher].append(p_df)
+            else:
+                pitcher_dict[ab.pitcher] = p_df
+        return batter_dict, pitcher_dict 
+
+    #create csv of gameID, playerID, and avg ex-ante runs created
+    def create_csv(self,file_name):
+        print ('about to write the CSV')
+        with open(file_name,'w') as f:
+            csv_writer = csv.writer(f,delimiter=',')
+            for player in self.batter_dicts:
+                df = self.batter_dicts[player]
+                dates = df['Game Date'].value_counts().keys()
+                for d in dates:
+                    condensed_df = df[df['Game Date']<=d]
+                    avg = condensed_df['Adjusted Runs Created'].mean()
+                    gameID = condensed_df.iloc[-1,-2]
+                    l = [player,gameID,avg]
+                    csv_writer.writerow(l)
+
     #takes the given run expectancies for each of the 24 situations and assigns a value to each at-bat
     #based off this value
     def add_run_expectancies(self):
@@ -207,6 +264,8 @@ class AB:
         self.outs = df['outs']
         self.runners = (df['firstBaseRunner'],df['secondBaseRunner'],df['thirdBaseRunner'])
         self.event = df['the_event']
+        self.batter = df['batterID']
+        self.pitcher = df['pitcherID']
         self.inning = inning
         self.starting_runs = None
         self.situation = self.calculate_state()
@@ -254,10 +313,9 @@ if __name__=="__main__":
  	startTime= time.time()
  	re_obj = REMatrix(cnx,startTime,yr=2017,mo=5)
  	print (time.time()-startTime)
- 	pickle_out = open('pickler201705','wb')
- 	pickle.dump(re_obj,pickle_out)
+ 	#pickle_out = open('pickler201705','wb')
+ 	#pickle.dump(re_obj,pickle_out)
  	#pickle_out.close()
 	#pickle_in = open('pickler201705','rb')
 	#val = pickle.load(pickle_in)
 	#print (val.expect_dict)
-    pass
