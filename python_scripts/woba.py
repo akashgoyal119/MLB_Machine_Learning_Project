@@ -102,7 +102,7 @@ class REMatrix:
         self.calculate_run_expectancies() #generate 24 expectancies for 24 situations
         self.add_run_expectancies()
         self.batter_dicts,self.pitcher_dicts = self.create_player_dfs()
-        self.create_csv('ok.txt')
+        self.create_csv('hitter re-ex.txt','pitcher re-ex.txt')
     
     #this will look at every at-bat and create a dataframe for each distinct batter/hitter
     def create_player_dfs(self):
@@ -139,7 +139,7 @@ class REMatrix:
         return batter_dict, pitcher_dict 
 
     #create csv of gameID, playerID, and avg ex-ante runs created
-    def create_csv(self,file_name):
+    def create_csv(self,file_name,file_name2):
         print ('about to write the CSV')
         with open(file_name,'w') as f:
             csv_writer = csv.writer(f,delimiter=',')
@@ -153,6 +153,17 @@ class REMatrix:
                     l = [player,gameID,avg]
                     csv_writer.writerow(l)
 
+        with open(file_name2,'w') as f:
+            csv_writer = csv.writer(f,delimiter=',')
+            for player in self.pitcher_dicts:
+                df = self.pitcher_dicts[player]
+                dates = df['Game Date'].value_counts().keys()
+                for d in dates:
+                    condensed_df = df[df['Game Date']<=d]
+                    avg = condensed_df['Adjusted Runs Created'].mean()
+                    gameID = condensed_df.iloc[-1,-2]
+                    l = [player,gameID,avg]
+                    csv_writer.writerow(l)
     #takes the given run expectancies for each of the 24 situations and assigns a value to each at-bat
     #based off this value
     def add_run_expectancies(self):
