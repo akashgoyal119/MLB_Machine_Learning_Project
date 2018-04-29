@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 import os
 import csv
-#import mysql.connector as mc 
 import pymysql as mc
 import time
 import webbrowser
@@ -10,6 +9,41 @@ from sklearn.cluster import KMeans
 import numpy as np
 import pandas as pd
 import getpass
+import pickle
+'''
+Here is how this file is structured
+1) Take in a connection, a yr and a month and query the DB for
+ gameID, current inning, abNum, pitchID, event, runners on base, outs,
+ current runs for each team, end of game runs for each team, and game date
+
+2) Read all this stuff into a Pandas dataframe.
+
+3) Go through all possible game/inning combinations, and for each game create a smaller
+dataframe, and then for each inning take an even smaller dataframe from that
+and pass it into the Inning Class.
+
+4) The sole purpose of the inning class is to get the score at the end of the inning so that
+I can use it in the at-bats to find the runs created during an inning.
+
+5) Go through the inning dataframe and for each row, find the last pitch of the at-bat.
+This will be the "Action Pitch" which I want to create a class from. Note that the data
+contains certain issues such as ejections which result in my data classifying certain rows
+as having 3 outs prior to the AB, so I will discard those.
+
+6) Choose the action pitch and create an AB class from it. The AB class will first calculate
+which of the 24 states we are in (as defined by Tom Tango in The Book). Then it will calculate
+the runs generated from the current AB to the end of the inning. (This is all in generate_ab_list)
+
+7) Call calculate_run_expectancies which generates the average runs generated in each of the
+24 situations.
+
+8) Call add_run_expectancies which updates the start and end run expectancies 
+for every bat in self.ab_list. This will allow us to generate a "value add above replacement" 
+for each batter.
+
+9) We're done! We've now calculated the value above replacement for each at-bat in the sample.
+Now we can calculate the weights for each type of hit and perform analysis
+'''
 
 class REMatrix:
     def __init__(self,cnx,startTime,yr=None,mo=None):
@@ -59,24 +93,39 @@ class REMatrix:
         self.ab_list = []
         self.expect_dict = {}
         self.generate_ab_list()
-        self.calculate_run_expectancies()
-        self.add_run_expectancies()
+        self.calculate_run_expectancies() #generate 24 expectancies for 24 situations
+        self.add_run_expectancies()  
     
+    #takes the given run expectancies for each of the 24 situations and assigns a value to each at-bat
+    #based off this value
     def add_run_expectancies(self):
-        #works because at-bats are in the correctly sorted order
+        #this loop adds the start run expectancies and next at-bats
         for i,ab in enumerate(self.ab_list):
             start_sit = ab.situation 
             ab.start_run_expectancy = self.expect_dict[start_sit]
             try:
-                ab.next_ab = self.ab_list[i+1]
-                if ab.next_ab.abNum == ab.abNum+1:
-                    ab.end_run_expectancy = ab.next_ab.start_run_expectancy
+                #if ab's are consecutive and in the same inning, mark a next AB
+                if (ab.abNum == self.ab_list[i+1].abNum-1 and
+                        ab.inning.inning_number == self.ab_list[i+1].inning.inning_number):
+                    ab.next_ab = self.ab_list[i+1]
                 else:
-                    ab.end_run_expectancy = 0
+                    ab.next_ab = None
             except IndexError as e: #special case for the last item
                 ab.next_ab = None
+        
+        #this adds the end run expectancies
+        for i, ab in enumerate(self.ab_list):
+            if ab.next_ab and ab.abNum == ab.next_ab.abNum-1:
+                #this will generally work except for when a player gets picked off
+                #to end the inning (or caught stealing to end inning)
+                ab.end_run_expectancy = ab.next_ab.start_run_expectancy
+            else:
                 ab.end_run_expectancy = 0
-    
+        
+        #finally calculate the value each batter added per AB
+        for ab in self.ab_list:
+            ab.calculate_adjusted_runs_created() 
+
     #create a dataframe of each gameID from self.all_combos, and then within those small dataframes
     #look up the individual innings to get those stats. 
     def generate_ab_list(self):
@@ -88,7 +137,7 @@ class REMatrix:
             if item[0] != previous_game_id:
                 previous_game_id = item[0]
                 curr_df = self.df[self.df['gameID']==item[0]]
-                print ('this combo took {} seconds'.format(time.time()-curr_time))
+                #print ('this combo took {} seconds'.format(time.time()-curr_time))
 
             #I separated inn_df and curr_df because of performance issues
             #allows me to look up current inning on a dataframe of just one game (~300Pitches)
@@ -159,17 +208,16 @@ class AB:
         self.runners = (df['firstBaseRunner'],df['secondBaseRunner'],df['thirdBaseRunner'])
         self.event = df['the_event']
         self.inning = inning
+        self.starting_runs = None
         self.situation = self.calculate_state()
         self.runs_created  = self.calculate_runs_created(df)
         self.start_run_expectancy = 0
         self.end_run_expectancy = 0
         self.next_ab = None
-        self.starting_runs = None
         self.adjusted_runs_created = None
     
-    #only call this after you've created a run-expectancy instance
     def calculate_adjusted_runs_created(self):
-        if not next_ab:
+        if not self.next_ab:
             self.adjusted_runs_created = self.end_run_expectancy - self.start_run_expectancy
         else:
             self.adjusted_runs_created = (self.end_run_expectancy - self.start_run_expectancy + 
@@ -201,27 +249,15 @@ class AB:
             raise ValueError("cant start AB with less than 0 or > 3 outs")
         return total
 
-year = None
-month = None
-try:
-    un = sys.argv[1].split('=')[1]
-
-    if len(sys.argv)==3:
-        year = int(sys.argv[2].split('=')[1])
-    elif len(sys.argv)==4:
-        year = int(sys.argv[2].split('=')[1])
-        month = int(sys.argv[3].split('=')[1])
-
-    pw = getpass.getpass()
-
-    cnx = mc.connect(user=un,password=pw,host='stromberg.cs.uchicago.edu',db='mlb_practicum',port=3306)
-    startTime= time.time()
-    tester2 = REMatrix(cnx,startTime,yr=year,mo=month)
-    print (tester2.expect_dict)
-    print (time.time()-startTime)
-
-except IndexError as e:
-    print ('usage --pw=password_name --un=user_name --yr=yr_number --mo=month_number')
-    print ('yr and mo are optional, but year is recommended for performance')
-except mc.err.OperationalError as e:
-    print ('username/password failed')
+if __name__=="__main__":
+ 	cnx = mc.connect(user='akashgoyal',password=os.environ['DB_PASSWORD'],host='stromberg.cs.uchicago.edu',db='mlb_practicum',port=3306)
+ 	startTime= time.time()
+ 	re_obj = REMatrix(cnx,startTime,yr=2017,mo=5)
+ 	print (time.time()-startTime)
+ 	pickle_out = open('pickler201705','wb')
+ 	pickle.dump(re_obj,pickle_out)
+ 	#pickle_out.close()
+	#pickle_in = open('pickler201705','rb')
+	#val = pickle.load(pickle_in)
+	#print (val.expect_dict)
+    pass
