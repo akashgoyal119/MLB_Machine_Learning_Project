@@ -118,11 +118,15 @@ for i in df.itertuples():
 		print('this iteration {} took {} seconds'.format(w,time.time()-curr))
 		curr = time.time()
 
+df = df.drop(columns=['curr_inn'])
+
 for i,pt in enumerate(types):
 	df[f'pct_{pt}_seen_team'] = all_lists[i]
+	print (f'finished adding {pt} team')
 
 for i,pt in enumerate(types):
 	df[f'pct_{pt}_seen_individual'] = all_lists2[i]
+	print (f'finished adding {pt} individual')
 
 df.to_csv('prior_pitches_full_game.csv')
 
