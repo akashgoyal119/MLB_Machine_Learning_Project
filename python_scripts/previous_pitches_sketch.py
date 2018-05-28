@@ -64,6 +64,8 @@ prevGame = 'phony game'
 prevPitcher = {'home':'home phony pitcher','away':'away phony pitcher'}
 
 in_game_total = initialize()
+in_game_total = {'home':in_game_total,'away':in_game_total} #dictionary of dictionaries
+
 w = 0
 curr = time.time()
 for i in df.itertuples():
@@ -76,12 +78,16 @@ for i in df.itertuples():
 	pitch_type = i[5]
 	inning = i[6] #used to distinguish home and away
 	home_or_away = 'away'
-	if inning*2%2==1: #it's the home team
+	if inning*2%2==1: #it's the home team batting
 		home_or_away = 'home'
 
 	#if we are in a new game or see a new pitcher, reset the values 
-	if curr_game!=prevGame or prevPitcher[home_or_away]!=curr_pitcher:
-		in_game_total = initialize()
+	if curr_game!=prevGame:
+		in_game_total['home'] = initialize()
+		in_game_total['away'] = initialize()
+		player_game_dict[curr_game+curr_batter] = initialize()
+
+	elif prevPitcher[home_or_away]!=curr_pitcher:
 		player_game_dict[curr_game+curr_batter] = initialize()
 
 	#in_game_total has pitch % of each type that all batters have seen against particular pitcher
@@ -89,19 +95,19 @@ for i in df.itertuples():
 	#the total % of each type of pitch. 
 	for i,item in enumerate(all_lists):
 		pt = pt_number_map[i]
-		if in_game_total['total'] == 0: #beginning condition case prevent divde by 0
+		if in_game_total[home_or_away]['total'] == 0: #beginning condition case prevent divde by 0
 			item.append(0)
 		else:
-			item.append(in_game_total[pt]/in_game_total['total'])
+			item.append(in_game_total[home_or_away][pt]/in_game_total[home_or_away]['total'])
 		#prepare for next iteration
 		if pt == pitch_type:
-			in_game_total[pt]+=1
-	in_game_total['total']+=1
+			in_game_total[home_or_away][pt]+=1
+	in_game_total[home_or_away]['total']+=1
 
 
 	#do same for % of pitch types seen by just the current hitter
+	player_dict = player_game_dict[curr_game+curr_batter]
 	for i,item in enumerate(all_lists2):
-		player_dict = player_game_dict[curr_game+curr_batter]
 		pt = pt_number_map[i]
 		if player_dict['total']==0:
 			item.append(0)
@@ -114,8 +120,8 @@ for i in df.itertuples():
 	#update values
 	prevGame = curr_game
 	prevPitcher[home_or_away] = curr_pitcher
-	if w %10000 == 0:
-		print('this iteration {} took {} seconds'.format(w,time.time()-curr))
+	if w %100000 == 0:
+		print('iteration {} took {} seconds'.format(w,time.time()-curr))
 		curr = time.time()
 
 df = df.drop(columns=['curr_inn'])
@@ -128,6 +134,7 @@ for i,pt in enumerate(types):
 	df[f'pct_{pt}_seen_individual'] = all_lists2[i]
 	print (f'finished adding {pt} individual')
 
+print ('now printing out the stuff')
 df.to_csv('prior_pitches_full_game.csv')
 
 
