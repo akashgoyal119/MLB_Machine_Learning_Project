@@ -55,13 +55,15 @@ def reclassify_pitches(df):
 
 query = 'SELECT pitcherID, pitchType,Pitch2.gameID,gameDate FROM Pitch2 INNER JOIN Game ON Game.gameID=Pitch2.gameID'
 df = pd.read_sql_query(query,cnx)
-
+print ('finished running the query')
 df2 = df.copy() 
+df = None #this was originally done in jupyter...
 df2 = reclassify_pitches(df2)
 
 distinct_games = df2.gameDate.unique()
 distinct_games = distinct_games[10:]
-full_df = []
+full_df = 'FILLER'
+original_type = type(full_df)
 
 password = pw
 user='akashgoyal'
@@ -102,11 +104,19 @@ for z,day in enumerate(distinct_games):
     condensed_df = player_df[player_df['total_pitches']>100]
     condensed_df = condensed_df.drop('total_pitches',axis=1)
     condensed_df['gameDate'] = day #add in the current date
+
+    if type(full_df)==original_type:
+        full_df = condensed_df
+    else:
+        full_df = full_df.append(condensed_df)
     print ('finished up df work')    
-    condensed_df.to_sql(name='pitcher_classifications_5_25_18',con=cnx2,if_exists='append',
-               index=True,index_label='playerID',dtype={None:VARCHAR(20)})
+    #condensed_df.to_sql(name='pitcher_classifications_5_25_18',con=cnx2,if_exists='append',
+    #           index=True,index_label='playerID',dtype={None:VARCHAR(20)})
     print ('added df to sql')
     if z%10==0:
         print (z,time.time()-start_time)
+
+full_df.to_csv('new_pitcher_percentages_5_29_18.csv')
+
 
 print ('all done!')
