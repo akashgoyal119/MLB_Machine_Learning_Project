@@ -62,7 +62,8 @@ df2 = reclassify_pitches(df2)
 
 distinct_games = df2.gameDate.unique()
 distinct_games = distinct_games[10:]
-full_df = []
+full_df = 'FILLER'
+original_type = type(full_df)
 
 password = pw
 user='akashgoyal'
@@ -103,11 +104,18 @@ for z,day in enumerate(distinct_games):
     condensed_df = player_df[player_df['total_pitches']>100]
     condensed_df = condensed_df.drop('total_pitches',axis=1)
     condensed_df['gameDate'] = day #add in the current date
+
+    if type(full_df)==original_type:
+        full_df = condensed_df
+    else:
+        full_df = full_df.append(condensed_df)  
     
-    condensed_df.to_sql(name='batter_classifications_5_25_18',con=cnx2,if_exists='append',
-               index=True,index_label='playerID',dtype={None:VARCHAR(20)})
-    print ('done adding df to sql')
+    #condensed_df.to_sql(name='batter_classifications_5_25_18',con=cnx2,if_exists='append',
+               #index=True,index_label='playerID',dtype={None:VARCHAR(20)})
+    #print ('done adding df to sql')
     if z%10==0:
         print (z,time.time()-start_time)
+
+full_df.to_csv('new_hitter_percentages_5_29_18.csv')
 
 print ('all done!')
