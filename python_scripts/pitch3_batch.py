@@ -15,11 +15,15 @@ import getpass
 import pandas as pd 
 from sqlalchemy import create_engine
 import sqlalchemy
+import credentials as cred
+import zipfile,urllib.request,shutil
+from tqdm import tqdm
 
 '''
 	This file is intended to update the Pitch3 Database by grabbing the games from the previous date
 	and then filling in all the information into the table. Note that the majority of the work is for the wRC calculation
 '''
+pw = getpass.getpass()
 
 # https://github.com/panzarino/mlbgame/blob/master/mlbgame/data.py
 BASE_URL = ('http://gd2.mlb.com/components/game/mlb/'
@@ -56,12 +60,54 @@ def get_date_from_game_id(game_id):
 	year, month, day, _discard = game_id.split('_', 3)
 	return int(year), int(month), int(day)
 
+def get_all_urls_from_retrosheet():
+	# this part extracts all the files
+	cwd = os.getcwd()
+	url = "https://www.retrosheet.org/events/2010seve.zip"
+	file_name = '2010zip.zip'
+	with urllib.request.urlopen(url) as response, open(file_name,'wb') as out_file:
+    		shutil.copyfileobj(response,out_file)
+    		with zipfile.ZipFile(file_name) as zf:
+        		zf.extractall(cwd+'/retrosheet_files')
+	# this part traverses through each of the files and creates a list of all the URLS
+	url_list = []
+	pathName = cwd+'/retrosheet_files/'
+	for file_name in os.listdir(pathName):
+		fileInput = os.fsdecode(file_name)
+		gameNum='1'
+		if fileInput[0]=='.' or fileInput[-3:]=='ROS':
+			continue
+		fname = open(pathName+fileInput,'r')
+		eachLine = fname.readlines()
+		for line in range(len(eachLine)):
+			lineArray = eachLine[line].split(',')
+			if lineArray[0]=='id':
+				gameID = lineArray[1][:-1]
+				theYear = gameID[3:7]
+				theMonth = gameID[7:9]
+				theDate = gameID[9:11]
+				gameNum = '1'
+				
+				#check for doubleheaders
+				if gameID[11]=='2':
+					gameNum = '2'
+				new_path = 'year_'+theYear+'/month_'+theMonth + '/day_'+theDate+'/gid_'+theYear+'_'+theMonth +'_'+theDate+'_'
+				#get the visiting team and home team
+				visitTeam = eachLine[line+2].split(',')[2][:-1].lower()+'mlb'
+				homeTeam = eachLine[line+3].split(',')[2][:-1].lower()+'mlb'
+				new_path = new_path+visitTeam+'_'+homeTeam+'_'+gameNum+'/inning/inning_all.xml'
+				url_list.append((gameID,'http://gd2.mlb.com/components/game/mlb/'+new_path))
+		fname.close()
+	return url_list
+
 #look at the inning_all xml files
-def get_game_data(gameID):
-	year, month, day = get_date_from_game_id(gameID)
-	url = GAME_URL.format(year,month,day,gameID,'inning/inning_all.xml')
-	relevant_info, error_data = main(gameID,url)
-	return relevant_info, error_data
+def get_game_data(tup):
+	#year, month, day = get_date_from_game_id(gameID)
+	#url = GAME_URL.format(year,month,day,gameID,'inning/inning_all.xml')
+	gameID = tup[0]
+	url = tup[1]
+	relevant_info = main(gameID,url)
+	return relevant_info
 
 def getPitchAttributes(subtree,args):
 	''' helper function for main '''
@@ -83,7 +129,7 @@ def main(item,url):
 		data = urlopen(url).readline()
 	except HTTPError as e: #likely got rained out
 		print ('no game '+url)
-		return [],[e,url]
+		return []
 
 	try:
 	    game = ET.fromstring(data)
@@ -94,7 +140,7 @@ def main(item,url):
 	except Exception as e2:
 	    print (e2)
 	    error_writer.extend([item,str(e2)])
-	    return [],error_writer
+	    return []
 
 	pitcherDict = {} #use to track pitch count
 	batterVpitcher= {}
@@ -164,15 +210,14 @@ def main(item,url):
 	            	home_team_runs = int(at_bat.attrib['home_team_runs'])
 	            	away_team_runs = int(at_bat.attrib['away_team_runs'])
 	            except Exception as e:
-	            	print (e)
 	            	error_writer.append(str(e))
 	            	pass
 	add_runs_created_to_list(csv_writer)
 
-	db_name = 'sloan'
-	user = 'root'
-	password = ''
-	host = 'localhost'
+	db_name = cred.db_name
+	user = cred.user
+	password = pw
+	host = cred.host
 	cnx = create_engine('mysql+pymysql://'+user+':'+password+'@'+host+':3306/'+db_name,echo=False)
 
 	columns = ['gameID','abNum','batterID','pitcherID','batterHand','pitcherHand',
@@ -191,7 +236,7 @@ def main(item,url):
 		print (e)
 		print ('already inserted these in',item,url)
 		error_writer.append(str(e))
-	return csv_writer,error_writer 
+	return csv_writer 
 	
 def add_runs_created_to_list(csv_writer):
 	# append the runs created in the at-bat
@@ -269,7 +314,8 @@ def calculate_runs_created(current_team_runs, team_runs_next_ab,
 	    elif outs ==2:
 	        total+=16
 	    elif outs>=3 or outs<0:
-	        raise ValueError("cant start AB with less than 0 or > 3 outs")
+	        print ('Umpire ejected a player and things got screwed up')
+	        return 16
 	    return total
 
 	situation = calculate_state(current_1b_runner,current_2b_runner,current_3b_runner,current_outs)
@@ -321,7 +367,9 @@ def update_count(event,prev_balls,prev_strikes):
 		return prev_balls, prev_strikes
 
 if __name__ == '__main__':
-	print ('starting cron job')
+	urls = get_all_urls_from_retrosheet()
+	'''
+	print ('starting job')
 	year = 2018
 
 	
@@ -343,10 +391,10 @@ if __name__ == '__main__':
 	game_list = p.map(get_schedule,l)
 	print ('done with first job')
 	game_list = [item for sublist in game_list for item in sublist] # https://stackoverflow.com/questions/952914/making-a-flat-list-out-of-list-of-lists-in-python
-	
+	'''
 	p = Pool(processes=10)
-	relevant_info, error_output = p.map(get_game_data,game_list)
-
+	relevant_info = p.map(get_game_data,urls)
+	
 
 	'''
 
